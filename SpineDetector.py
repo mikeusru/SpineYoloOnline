@@ -157,10 +157,10 @@ class SpineDetector:
                 draw.rectangle(
                     [left + i, top + i, right - i, bottom - i],
                     outline=colors[0])
-            draw.rectangle(
-                [tuple(text_origin), tuple(text_origin + label_size)],
-                fill=colors[0])
-            draw.text(text_origin, label, fill=colors[0], font=font)
+            # draw.rectangle(
+            #     [tuple(text_origin), tuple(text_origin + label_size)],
+            #     fill=colors[0])
+            # draw.text(text_origin, label, fill=colors[0], font=font)
             del draw
         return image
 

@@ -1,12 +1,12 @@
 import os
 
-from PIL import Image
+# from PIL import Image
 
-from model_data.utils import letterbox_image
+# from model_data.utils import letterbox_image
 
 os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"  # see issue #152
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
-import keras.backend as K
+# import keras.backend as K
 import time
 from SpineDetector import SpineDetector
 
@@ -23,5 +23,5 @@ def save_results(image, boxes):
     # return img_path_relative, boxes_path_relative
 
 detector = SpineDetector()
-r_image, boxes_scores = detector.find_spines('temp/test_spines.jpg', 15)
+r_image, boxes_scores = detector.find_spines('temp/000002.tif', 10)
 save_results(r_image, boxes_scores)
