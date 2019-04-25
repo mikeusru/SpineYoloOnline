@@ -11,4 +11,4 @@ import time
 from SpineDetector import SpineDetector
 
 detector = SpineDetector()
-detector.find_spines('temp/test_spines.jpg', 10)
+detector.find_spines('temp/test_spines.jpg', 15)

@@ -108,7 +108,7 @@ class SpineDetector:
                 boxes.append(window['boxes'])
                 scores.append(window['scores'])
         boxes = np.concatenate(boxes, axis=0)
-        scores = np.concatenate(scores, axis=0)
+        scores = np.expand_dims(np.concatenate(scores, axis=0), axis=1)
         boxes_scores = np.concatenate([boxes,scores], axis=1)
         return boxes_scores
 
