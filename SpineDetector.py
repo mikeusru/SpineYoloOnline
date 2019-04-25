@@ -170,7 +170,7 @@ class SpineDetector:
         image = (image.astype(np.float32) / dtype_max * 255).astype(np.uint8)
         return image
 
-    def run(self, image_path, scale):
+    def find_spines(self, image_path, scale):
         image = self._load_image(image_path)
         image_rescaled, resize_ratio = self._rescale_image(image, scale)
         window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
