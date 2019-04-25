@@ -10,5 +10,18 @@ import keras.backend as K
 import time
 from SpineDetector import SpineDetector
 
+def save_results(image, boxes):
+    sub_path = 'results'
+    if not os.path.isdir(sub_path):
+        os.makedirs(sub_path)
+    timestr = time.strftime("%Y%m%d%H%M%S")
+    img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
+    image.save(img_path_relative)
+    # boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
+    # boxes_path_full = os.path.join(STATIC_ROOT, boxes_path_relative)
+    # np.savetxt(boxes_path_full, boxes, delimiter=',')
+    # return img_path_relative, boxes_path_relative
+
 detector = SpineDetector()
-detector.find_spines('temp/test_spines.jpg', 15)
+r_image, boxes_scores = detector.find_spines('temp/test_spines.jpg', 15)
+save_results(r_image, boxes_scores)

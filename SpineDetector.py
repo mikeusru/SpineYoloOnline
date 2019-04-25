@@ -56,12 +56,12 @@ class SpineDetector:
 
     def _preprocess_window(self, image):
         image = Image.fromarray(image).convert("L").convert("RGB")
-        boxed_image = letterbox_image(image, tuple(reversed(self.model_image_size)))
+        boxed_image, scale = letterbox_image(image, tuple(reversed(self.model_image_size)))
         image_data = np.array(boxed_image, dtype='float32')
         print('Shape: {}, max: {}'.format(image_data.shape, image_data.max()))
         image_data /= 255.
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
-        return image_data
+        return image_data, scale
 
     def _get_sliding_window_indices(self, image_shape):
         window_size = self.model_image_size
@@ -76,16 +76,16 @@ class SpineDetector:
         return window_list
 
     def _detect_spines_in_windows(self, image, window_list):
-        for window in window_list:
-            image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
-            image_data = self._preprocess_window(image_cut)
-            # TODO: Should I run this on batch images because there's a batch dimension?
-            with K.get_session() as sess:
+        with K.get_session() as sess:
+            for window in window_list:
+                image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
+                image_data, window_scale = self._preprocess_window(image_cut)
+                # TODO: Should I run this on batch images because there's a batch dimension?
                 boxes_out, scores_out, classes_out = sess.run([self.boxes, self.scores, self.classes],
                                                               feed_dict={
-                                                                  self.model.input: image_data,
-                                                                  self.input_image_shape: [416, 416]})
-                window['boxes'] = np.array(boxes_out)
+                                                              self.model.input: image_data,
+                                                              self.input_image_shape: [416, 416]})
+                window['boxes'] = np.array(boxes_out) / window_scale
                 window['scores'] = np.array(scores_out)
         return window_list
 

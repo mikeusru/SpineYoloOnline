@@ -28,7 +28,7 @@ def letterbox_image(image, size):
     image = image.resize((nw, nh), Image.BICUBIC)
     new_image = Image.new('RGB', size, (128, 128, 128))
     new_image.paste(image, ((w - nw) // 2, (h - nh) // 2))
-    return new_image
+    return new_image, scale
 
 
 def rand(a=0, b=1):
