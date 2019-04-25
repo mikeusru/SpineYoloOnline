@@ -1,12 +1,13 @@
 import os
 
 import numpy as np
+from PIL import Image, ImageFont, ImageDraw
 from keras.models import model_from_json
 import keras.backend as K
 from skimage import transform
 
 from model_data.model import yolo_eval
-from model_data.utils import letterbox_image
+from model_data.utils import letterbox_image, calc_iou
 
 
 class SpineDetector:
@@ -53,9 +54,8 @@ class SpineDetector:
         image_rescaled = transform.resize(image, new_shape, preserve_range=True).astype(np.uint8)
         return image_rescaled, resize_ratio
 
-
-
     def _preprocess_window(self, image):
+        image = Image.fromarray(image).convert("L").convert("RGB")
         boxed_image = letterbox_image(image, tuple(reversed(self.model_image_size)))
         image_data = np.array(boxed_image, dtype='float32')
         print('Shape: {}, max: {}'.format(image_data.shape, image_data.max()))
@@ -95,12 +95,89 @@ class SpineDetector:
             window['boxes'][:, [1, 3]] += window['c']
         return window_list
 
-    def run(self, image, scale):
+    def _rescale_boxes(self, window_list, resize_ratio):
+        for window in window_list:
+            window['boxes'] /= resize_ratio
+        return window_list
+
+    def _get_boxes_scores_array(self, window_list):
+        boxes = []
+        scores = []
+        for window in window_list:
+            if window['boxes'].size != 0:
+                boxes.append(window['boxes'])
+                scores.append(window['scores'])
+        boxes = np.concatenate(boxes, axis=0)
+        scores = np.concatenate(scores, axis=0)
+        boxes_scores = np.concatenate([boxes,scores], axis=1)
+        return boxes_scores
+
+    def _remove_overlapping_boxes(self, boxes_scores):
+        ind = np.argsort(-boxes_scores[:, 4])
+        boxes_scores_sorted = boxes_scores[ind, :]
+        counter = 0
+        while True:
+            if counter >= boxes_scores_sorted.shape[0]:
+                break
+            iou = calc_iou(boxes_scores_sorted[counter, :4], boxes_scores_sorted[counter + 1:, :4])
+            mask = np.ones(boxes_scores_sorted.shape[0], dtype=bool)
+            mask[counter+1:][iou > self.iou_threshold] = False
+            boxes_scores_sorted = boxes_scores_sorted[mask]
+            counter += 1
+        return boxes_scores_sorted
+
+    def _draw_output_image(self, image, boxes_scores):
+        image = Image.fromarray(
+            (np.array(image).astype(np.float) / np.array(image).max() * 255).astype(np.uint8)).convert("L").convert(
+            "RGB")
+        font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
+                                  size=max(np.floor(2e-2 * image.size[1] + 0.5).astype('int32'), 8))
+        thickness = max((image.size[0] + image.size[1]) // 1800, 1)
+        colors = [(255, 0, 0)]
+        if len(boxes_scores.shape) == 1:
+            boxes_scores = np.expand_dims(boxes_scores, axis=0)
+        for box_score in boxes_scores:
+            box = box_score[:4]
+            score = box_score[4]
+            label = '{:.2f}'.format(score)
+            draw = ImageDraw.Draw(image)
+            label_size = draw.textsize(label, font)
+            top, left, bottom, right = box
+            top = max(0, np.floor(top + 0.5).astype('int32'))
+            left = max(0, np.floor(left + 0.5).astype('int32'))
+            bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
+            right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
+            print(label, (left, top), (right, bottom))
+            if top - label_size[1] >= 0:
+                text_origin = np.array([left, top - label_size[1]])
+            else:
+                text_origin = np.array([left, top + 1])
+
+            for i in range(thickness):
+                draw.rectangle(
+                    [left + i, top + i, right - i, bottom - i],
+                    outline=colors[0])
+            draw.rectangle(
+                [tuple(text_origin), tuple(text_origin + label_size)],
+                fill=colors[0])
+            draw.text(text_origin, label, fill=colors[0], font=font)
+            del draw
+        return image
+
+    def _load_image(self, img_file):
+        image = np.array(Image.open(img_file))
+        dtype_max = np.iinfo(image.dtype).max
+        image = (image.astype(np.float32) / dtype_max * 255).astype(np.uint8)
+        return image
+
+    def run(self, image_path, scale):
+        image = self._load_image(image_path)
         image_rescaled, resize_ratio = self._rescale_image(image, scale)
         window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
         window_list = self._detect_spines_in_windows(image_rescaled, window_list)
         window_list = self._shift_boxes(window_list)
-        window_list = self._rescale_boxes(window_list)
-        boxes, scores = self._remove_overlapping_boxes(window_list)
-        r_image = self._draw_output_image(image, boxes, scores)
-        return r_image, boxes, scores
+        window_list = self._rescale_boxes(window_list, resize_ratio)
+        boxes_scores = self._get_boxes_scores_array(window_list)
+        boxes_scores = self._remove_overlapping_boxes(boxes_scores)
+        r_image = self._draw_output_image(image, boxes_scores)
+        return r_image, boxes_scores
