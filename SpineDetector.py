@@ -53,22 +53,9 @@ class SpineDetector:
         image_rescaled = transform.resize(image, new_shape, preserve_range=True).astype(np.uint8)
         return image_rescaled, resize_ratio
 
-    def detect_spines_in_image_list(self, image_list):
-        boxes = []
-        scores = []
-        for image in image_list:
-            image_data = self._preprocess_image(image)
-            # TODO: Should I run this on batch images because there's a batch dimension?
-            with K.get_session() as sess:
-                boxes_out, scores_out, classes_out = sess.run([self.boxes, self.scores, self.classes],
-                                                              feed_dict={
-                                                                  self.model.input: image_data,
-                                                                  self.input_image_shape: [416, 416]})
-                boxes.append(boxes_out)
-                scores.append(scores_out)
-        return boxes, scores
 
-    def _preprocess_image(self, image):
+
+    def _preprocess_window(self, image):
         boxed_image = letterbox_image(image, tuple(reversed(self.model_image_size)))
         image_data = np.array(boxed_image, dtype='float32')
         print('Shape: {}, max: {}'.format(image_data.shape, image_data.max()))
@@ -76,18 +63,44 @@ class SpineDetector:
         image_data = np.expand_dims(image_data, 0)  # Add batch dimension.
         return image_data
 
-    def _split_image(self, image):
+    def _get_sliding_window_indices(self, image_shape):
         window_size = self.model_image_size
-        window_step = int(self.model_image_size[0] / 2)
+        step_size = int(self.model_image_size[0] / 2)
+        window_list = []
+        for row_ind in range(0, image_shape[0], step_size):
+            for col_ind in range(0, image_shape[1], step_size):
+                rc = {'r': row_ind, 'c': col_ind,
+                      'r_max': min(row_ind + window_size[0], image_shape[0]),
+                      'c_max': min(col_ind + window_size[1], image_shape[1])}
+                window_list.append(rc)
+        return window_list
 
-    def yield_sliding_windows(self, image, sliding_window_step, sliding_window_side):
-        for y in range(0, image.shape[0], sliding_window_step):
-            for x in range(0, image.shape[1], sliding_window_step):
-                img_window = image[y:y + self.sliding_window_side, x:x + self.sliding_window_side]
-                yield (x, y, img_window, boxes_in_window)
+    def _detect_spines_in_windows(self, image, window_list):
+        for window in window_list:
+            image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
+            image_data = self._preprocess_window(image_cut)
+            # TODO: Should I run this on batch images because there's a batch dimension?
+            with K.get_session() as sess:
+                boxes_out, scores_out, classes_out = sess.run([self.boxes, self.scores, self.classes],
+                                                              feed_dict={
+                                                                  self.model.input: image_data,
+                                                                  self.input_image_shape: [416, 416]})
+                window['boxes'] = np.array(boxes_out)
+                window['scores'] = np.array(scores_out)
+        return window_list
+
+    def _shift_boxes(self, window_list):
+        for window in window_list:
+            window['boxes'][:, [0, 2]] += window['r']
+            window['boxes'][:, [1, 3]] += window['c']
+        return window_list
 
     def run(self, image, scale):
-        image, resize_ratio = self._rescale_image(image, scale)
-        image_list = self._split_image(image)
-
-#TODO: Instead of creating separate windows, just create an array of indices for pulling out images from the resized image
+        image_rescaled, resize_ratio = self._rescale_image(image, scale)
+        window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
+        window_list = self._detect_spines_in_windows(image_rescaled, window_list)
+        window_list = self._shift_boxes(window_list)
+        window_list = self._rescale_boxes(window_list)
+        boxes, scores = self._remove_overlapping_boxes(window_list)
+        r_image = self._draw_output_image(image, boxes, scores)
+        return r_image, boxes, scores
