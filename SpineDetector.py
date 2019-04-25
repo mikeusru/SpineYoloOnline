@@ -83,8 +83,8 @@ class SpineDetector:
                 # TODO: Should I run this on batch images because there's a batch dimension?
                 boxes_out, scores_out, classes_out = sess.run([self.boxes, self.scores, self.classes],
                                                               feed_dict={
-                                                              self.model.input: image_data,
-                                                              self.input_image_shape: [416, 416]})
+                                                                  self.model.input: image_data,
+                                                                  self.input_image_shape: [416, 416]})
                 window['boxes'] = np.array(boxes_out) / window_scale
                 window['scores'] = np.array(scores_out)
         return window_list
@@ -109,7 +109,7 @@ class SpineDetector:
                 scores.append(window['scores'])
         boxes = np.concatenate(boxes, axis=0)
         scores = np.expand_dims(np.concatenate(scores, axis=0), axis=1)
-        boxes_scores = np.concatenate([boxes,scores], axis=1)
+        boxes_scores = np.concatenate([boxes, scores], axis=1)
         return boxes_scores
 
     def _remove_overlapping_boxes(self, boxes_scores):
@@ -121,7 +121,7 @@ class SpineDetector:
                 break
             iou = calc_iou(boxes_scores_sorted[counter, :4], boxes_scores_sorted[counter + 1:, :4])
             mask = np.ones(boxes_scores_sorted.shape[0], dtype=bool)
-            mask[counter+1:][iou > self.iou_threshold] = False
+            mask[counter + 1:][iou > self.iou_threshold] = False
             boxes_scores_sorted = boxes_scores_sorted[mask]
             counter += 1
         return boxes_scores_sorted
