@@ -1,8 +1,6 @@
 import boto3
 import os
 import time
-import keras.backend as K
-# TODO: don't activate SpineDetector before downloading all the stuff from S3 bucket
 from SpineDetector import SpineDetector
 
 SPINE_DETECTOR = None
@@ -18,21 +16,26 @@ def handler(event, context):
 
     str_file = '/temp/images/test_spines.jpg'
 
-    downloadFromS3(str_bucket, '/images/test_spines.jpg', str_file)
+    download_from_s3(str_bucket, '/images/test_spines.jpg', str_file)
 
     global SPINE_DETECTOR
     if SPINE_DETECTOR is None:
-        downloadFromS3(str_bucket, 'model/yolov3_spines.json', '/temp/model/yolov3_spines.json')
+        download_from_s3(str_bucket, 'model/yolov3_spines.json', '/temp/model/model.json')
+        download_from_s3(str_bucket, 'model/yolov3_spines_combined_10um_scale.h5', '/temp/model/weights.h5')
     image = os.path.join('/temp/images/', 'test_spines.jpg')
     result = run_inference_on_image(image)
+    return result
+
 
 def run_inference_on_image(image):
     global SPINE_DETECTOR
     if SPINE_DETECTOR is None:
         SPINE_DETECTOR = SpineDetector()
+    r_image, boxes_scores = SPINE_DETECTOR.find_spines('temp/images/test_spines.jpg', 10)
+    return boxes_scores
 
 
-def downloadFromS3(strBucket, strKey, strFile):
+def download_from_s3(strBucket, strKey, strFile):
     s3_client = boto3.client('s3')
     s3_client.download_file(strBucket, strKey, strFile)
 
@@ -45,7 +48,6 @@ def save_results(image, boxes):
     img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
     image.save(img_path_relative)
 
-
 # detector = SpineDetector()
-r_image, boxes_scores = detector.find_spines('temp/000002.tif', 10)
+# r_image, boxes_scores = detector.find_spines('temp/000002.tif', 10)
 # save_results(r_image, boxes_scores)

@@ -13,8 +13,8 @@ from model_data.utils import letterbox_image, calc_iou
 class SpineDetector:
     def __init__(self):
         self.anchors_path = os.path.join('model_data', 'yolo_anchors.txt')
-        self.model_path = os.path.join('model_data', 'yolov3_spines.json')
-        self.weights_path = os.path.join('model_data', 'yolov3_spines_combined_10um_scale.h5')
+        self.model_path = os.path.join('temp', 'model', 'model.json')
+        self.weights_path = os.path.join('temp', 'model', 'weights.h5')
         self.class_names = ['Spine']
         self.score_threshold = 0.3
         self.iou_threshold = 0.45
@@ -22,6 +22,7 @@ class SpineDetector:
         self.target_scale_pixels_per_um = 10
         self.anchors = self._load_anchors()
         self.model = self._load_model()
+        self.sess = K.get_session()
         self.boxes, self.scores, self.classes = self._generate_output_tensors()
 
     def _load_anchors(self):
@@ -76,18 +77,16 @@ class SpineDetector:
         return window_list
 
     def _detect_spines_in_windows(self, image, window_list):
-        # TODO: Put the get_session outside everything and make it global.
-        with K.get_session() as sess:
-            for window in window_list:
-                image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
-                image_data, window_scale = self._preprocess_window(image_cut)
-                # TODO: Should I run this on batch images because there's a batch dimension?
-                boxes_out, scores_out, classes_out = sess.run([self.boxes, self.scores, self.classes],
-                                                              feed_dict={
-                                                                  self.model.input: image_data,
-                                                                  self.input_image_shape: [416, 416]})
-                window['boxes'] = np.array(boxes_out) / window_scale
-                window['scores'] = np.array(scores_out)
+        for window in window_list:
+            image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
+            image_data, window_scale = self._preprocess_window(image_cut)
+            # TODO: Should I run this on batch images because there's a batch dimension?
+            boxes_out, scores_out, classes_out = self.sess.run([self.boxes, self.scores, self.classes],
+                                                          feed_dict={
+                                                              self.model.input: image_data,
+                                                              self.input_image_shape: [416, 416]})
+            window['boxes'] = np.array(boxes_out) / window_scale
+            window['scores'] = np.array(scores_out)
         return window_list
 
     def _shift_boxes(self, window_list):
