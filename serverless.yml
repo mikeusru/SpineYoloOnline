@@ -1,0 +1,25 @@
+service: spineYoloLambda
+
+frameworkVersion: ">=1.2.0 <2.0.0"
+
+provider:
+  name: aws
+  region: us-east-1
+  runtime: python3.6
+  memorySize: 1536
+  timeout: 60
+  iamRoleStatements:
+    -  Effect: "Allow"
+       Action:
+         - "s3:ListBucket"
+       Resource:
+         - arn:aws:s3:::spine-yolo-serverless
+    -  Effect: "Allow"
+       Action:
+         - "s3:GetObject"
+       Resource:
+         - arn:aws:s3:::spine-yolo-serverless/*
+
+functions:
+  main:
+    handler: main.handler
