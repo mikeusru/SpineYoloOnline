@@ -76,6 +76,7 @@ class SpineDetector:
         return window_list
 
     def _detect_spines_in_windows(self, image, window_list):
+        # TODO: Put the get_session outside everything and make it global.
         with K.get_session() as sess:
             for window in window_list:
                 image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
