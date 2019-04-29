@@ -1,18 +1,24 @@
+-f /usr/share/pip-wheels
 absl-py==0.7.1
 astor==0.7.1
 bleach==1.5.0
+Click==7.0
 cycler==0.10.0
 decorator==4.4.0
+Flask==1.0.2
 gast==0.2.2
 grpcio==1.20.1
 h5py==2.9.0
 html5lib==0.9999999
 imageio==2.5.0
+itsdangerous==1.1.0
+Jinja2==2.10.1
 Keras==2.2.4
 Keras-Applications==1.0.7
 Keras-Preprocessing==1.0.9
 kiwisolver==1.1.0
 Markdown==3.1
+MarkupSafe==1.1.1
 matplotlib==3.0.3
 networkx==2.3
 numpy==1.16.3
