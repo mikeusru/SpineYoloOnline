@@ -13,8 +13,8 @@ from model_data.utils import letterbox_image, calc_iou
 class SpineDetector:
     def __init__(self):
         self.anchors_path = os.path.join('model_data', 'yolo_anchors.txt')
-        self.model_path = os.path.join('temp', 'model', 'model.json')
-        self.weights_path = os.path.join('temp', 'model', 'weights.h5')
+        self.model_path = os.path.join('model_data', 'model.json')
+        self.weights_path = os.path.join('model_data', 'weights.h5')
         self.class_names = ['Spine']
         self.score_threshold = 0.3
         self.iou_threshold = 0.45
