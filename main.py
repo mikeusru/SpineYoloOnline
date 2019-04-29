@@ -1,4 +1,3 @@
-import boto3
 import os
 import time
 from SpineDetector import SpineDetector
