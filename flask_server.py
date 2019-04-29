@@ -2,8 +2,8 @@ import os
 import time
 import numpy as np
 from flask import Flask, render_template, request
-from spine_yolo import SpineYolo
-from main import load_settings_file
+
+from SpineDetector import SpineDetector
 
 app = Flask(__name__)
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -17,11 +17,10 @@ def index():
 
 @app.route("/predict", methods=['POST'])
 def predict():
+    spine_detector = SpineDetector()
     uploaded_image_path = upload_image(request.files.getlist('file'))
     scale = int(request.form['scale'])
-    sp.detect(uploaded_image_path, scale)
-    r_image = sp.r_images[0]
-    r_boxes = sp.r_boxes
+    r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
     image_file, data_file = save_results(r_image, r_boxes)
     print('detection done')
     return render_template("results.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
@@ -61,8 +60,4 @@ def submit_training_data():
 
 if __name__ == '__main__':
     print("Current Working Directory ", os.getcwd())
-    sp = SpineYolo()
-    settings_dict = load_settings_file('settings.txt')
-    sp.set_model_path(settings_dict['trained_model_path'])
-    sp.set_detector()
     app.run(host='0.0.0.0', port=5000, debug=False)
