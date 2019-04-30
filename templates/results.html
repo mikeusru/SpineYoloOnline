@@ -7,7 +7,7 @@
 </head>
 <body>
 <h2>Results</h2>
-<p>Format is [X, Y, Right, Bottom, Score]</p>
+<p>Format is [X, Y, Right, Bottom, Score, Frame]</p>
 <div class="results">
 
     <ul id="horizontal-list">
@@ -16,6 +16,7 @@
                 <li>{{ '{:.2f}'.format(xyrb)}}</li>
             {% endfor %}
             <li>{{'{:.2f}'.format(item[4])}}</li>
+            <li>{{'{:.2f}'.format(item[5])}}</li>
             <li><br></li>
         {% endfor %}
     </ul>

@@ -60,3 +60,15 @@ def calc_iou(boxA, boxB):
     iou = interArea / (boxAArea + boxBArea - interArea)
 
     return iou
+
+
+def load_tiff_stack(path):
+    count = 0
+    img = Image.open(path)
+    while True:
+        try:
+            img.seek(count)
+        except EOFError:
+            break
+        count += 1
+    return img, count

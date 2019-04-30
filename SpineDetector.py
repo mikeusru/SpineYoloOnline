@@ -7,7 +7,7 @@ import keras.backend as K
 from skimage import transform
 
 from model_data.model import yolo_eval
-from model_data.utils import letterbox_image, calc_iou
+from model_data.utils import letterbox_image, calc_iou, load_tiff_stack
 
 
 class SpineDetector:
@@ -82,9 +82,9 @@ class SpineDetector:
             image_data, window_scale = self._preprocess_window(image_cut)
             # TODO: Should I run this on batch images because there's a batch dimension?
             boxes_out, scores_out, classes_out = self.sess.run([self.boxes, self.scores, self.classes],
-                                                          feed_dict={
-                                                              self.model.input: image_data,
-                                                              self.input_image_shape: [416, 416]})
+                                                               feed_dict={
+                                                                   self.model.input: image_data,
+                                                                   self.input_image_shape: [416, 416]})
             window['boxes'] = np.array(boxes_out) / window_scale
             window['scores'] = np.array(scores_out)
         return window_list
@@ -103,13 +103,15 @@ class SpineDetector:
     def _get_boxes_scores_array(self, window_list):
         boxes = []
         scores = []
+        boxes_scores = np.array([[]])
         for window in window_list:
             if window['boxes'].size != 0:
                 boxes.append(window['boxes'])
                 scores.append(window['scores'])
-        boxes = np.concatenate(boxes, axis=0)
-        scores = np.expand_dims(np.concatenate(scores, axis=0), axis=1)
-        boxes_scores = np.concatenate([boxes, scores], axis=1)
+        if len(boxes) != 0:
+            boxes = np.concatenate(boxes, axis=0)
+            scores = np.expand_dims(np.concatenate(scores, axis=0), axis=1)
+            boxes_scores = np.concatenate([boxes, scores], axis=1)
         return boxes_scores
 
     def _remove_overlapping_boxes(self, boxes_scores):
@@ -126,7 +128,7 @@ class SpineDetector:
             counter += 1
         return boxes_scores_sorted
 
-    def _draw_output_image(self, image, boxes_scores):
+    def _draw_output_image(self, image, boxes_scores_frames, draw_frame=False):
         image = Image.fromarray(
             (np.array(image).astype(np.float) / np.array(image).max() * 255).astype(np.uint8)).convert("L").convert(
             "RGB")
@@ -134,11 +136,12 @@ class SpineDetector:
                                   size=max(np.floor(2e-2 * image.size[1] + 0.5).astype('int32'), 8))
         thickness = max((image.size[0] + image.size[1]) // 1800, 1)
         colors = [(255, 0, 0)]
-        if len(boxes_scores.shape) == 1:
-            boxes_scores = np.expand_dims(boxes_scores, axis=0)
-        for box_score in boxes_scores:
-            box = box_score[:4]
-            score = box_score[4]
+        if len(boxes_scores_frames.shape) == 1:
+            boxes_scores_frames = np.expand_dims(boxes_scores_frames, axis=0)
+        for box_score_frame in boxes_scores_frames:
+            box = box_score_frame[:4]
+            score = box_score_frame[4]
+            frame = box_score_frame[5]
             label = '{:.2f}'.format(score)
             draw = ImageDraw.Draw(image)
             label_size = draw.textsize(label, font)
@@ -147,7 +150,7 @@ class SpineDetector:
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
-            print(label, (left, top), (right, bottom))
+            print('Score {} XYRB {} {} {} {}, Frame {}'.format(label, left, top, right, bottom, frame))
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
             else:
@@ -161,23 +164,44 @@ class SpineDetector:
             #     [tuple(text_origin), tuple(text_origin + label_size)],
             #     fill=colors[0])
             # draw.text(text_origin, label, fill=colors[0], font=font)
+            if draw_frame:
+                draw.text(text_origin, frame, fill=colors[0], font=font)
             del draw
         return image
 
-    def _load_image(self, img_file):
-        image = np.array(Image.open(img_file))
+    def _preprocess_image_on_load(self, img):
+        image = np.array(img)
         dtype_max = np.iinfo(image.dtype).max
         image = (image.astype(np.float32) / dtype_max * 255).astype(np.uint8)
         return image
 
+    def _load_image(self, img_file):
+        image, num_frames = load_tiff_stack(img_file)
+        image_list = []
+        for frame in range(num_frames):
+            image.seek(frame)
+            image_list.append(self._preprocess_image_on_load(image))
+        return image_list
+
     def find_spines(self, image_path, scale):
-        image = self._load_image(image_path)
-        image_rescaled, resize_ratio = self._rescale_image(image, scale)
-        window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
-        window_list = self._detect_spines_in_windows(image_rescaled, window_list)
-        window_list = self._shift_boxes(window_list)
-        window_list = self._rescale_boxes(window_list, resize_ratio)
-        boxes_scores = self._get_boxes_scores_array(window_list)
-        boxes_scores = self._remove_overlapping_boxes(boxes_scores)
-        r_image = self._draw_output_image(image, boxes_scores)
-        return r_image, boxes_scores
+        image_list = self._load_image(image_path)
+        boxes_scores_frames_list = []
+        for frame, image in enumerate(image_list):
+            image_rescaled, resize_ratio = self._rescale_image(image, scale)
+            window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
+            window_list = self._detect_spines_in_windows(image_rescaled, window_list)
+            window_list = self._shift_boxes(window_list)
+            window_list = self._rescale_boxes(window_list, resize_ratio)
+            boxes_scores = self._get_boxes_scores_array(window_list)
+            if boxes_scores.size != 0:
+                frame_array = np.ones([boxes_scores.shape[0], 1]) * frame
+                boxes_scores_frames = np.concatenate([boxes_scores, frame_array], axis=1)
+                boxes_scores_frames_list.append(boxes_scores_frames)
+        boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
+        # TODO: set a range for where overlapping spines are probably different
+        boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
+        draw_frames = False
+        if len(image_list) > 1:
+            draw_frames = True
+        r_image = self._draw_output_image(image, boxes_scores_frames, draw_frames)
+        return r_image, boxes_scores_frames
