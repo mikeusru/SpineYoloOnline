@@ -133,7 +133,7 @@ class SpineDetector:
             (np.array(image).astype(np.float) / np.array(image).max() * 255).astype(np.uint8)).convert("L").convert(
             "RGB")
         font = ImageFont.truetype(font='font/FiraMono-Medium.otf',
-                                  size=max(np.floor(2e-2 * image.size[1] + 0.5).astype('int32'), 8))
+                                  size=max(np.floor(2e-2 * image.size[1] + 0.5).astype('int32'), 12))
         thickness = max((image.size[0] + image.size[1]) // 1800, 1)
         colors = [(255, 0, 0)]
         if len(boxes_scores_frames.shape) == 1:
@@ -169,7 +169,7 @@ class SpineDetector:
                 draw.text(text_origin, label_frame, fill=colors[0], font=font)
             del draw
         if image.size[0] < 416:
-            image, _ = letterbox_image(image,(416,416))
+            image, _ = letterbox_image(image, (416, 416))
         return image
 
     def _preprocess_image_on_load(self, img):
