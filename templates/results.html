@@ -16,7 +16,7 @@
                 <li>{{ '{:.2f}'.format(xyrb)}}</li>
             {% endfor %}
             <li>{{'{:.2f}'.format(item[4])}}</li>
-            <li>{{'{:.2f}'.format(item[5])}}</li>
+            <li>{{'{:d}'.format(item[5]|int)}}</li>
             <li><br></li>
         {% endfor %}
     </ul>
