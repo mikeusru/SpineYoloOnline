@@ -72,3 +72,11 @@ def load_tiff_stack(path):
             break
         count += 1
     return img, count
+
+
+def _max_projection_from_list(image_list):
+    if len(image_list) != 1:
+        image_max = np.max(np.stack(image_list, axis=2), axis=2)
+    else:
+        image_max = image_list[0]
+    return image_max

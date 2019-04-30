@@ -7,7 +7,7 @@ import keras.backend as K
 from skimage import transform
 
 from model_data.model import yolo_eval
-from model_data.utils import letterbox_image, calc_iou, load_tiff_stack
+from model_data.utils import letterbox_image, calc_iou, load_tiff_stack, _max_projection_from_list
 
 
 class SpineDetector:
@@ -142,15 +142,16 @@ class SpineDetector:
             box = box_score_frame[:4]
             score = box_score_frame[4]
             frame = box_score_frame[5]
-            label = '{:.2f}'.format(score)
+            label_score = '{:.2f}'.format(score)
+            label_frame = '{:.0f}'.format(frame)
             draw = ImageDraw.Draw(image)
-            label_size = draw.textsize(label, font)
+            label_size = draw.textsize(label_score, font)
             top, left, bottom, right = box
             top = max(0, np.floor(top + 0.5).astype('int32'))
             left = max(0, np.floor(left + 0.5).astype('int32'))
             bottom = min(image.size[1], np.floor(bottom + 0.5).astype('int32'))
             right = min(image.size[0], np.floor(right + 0.5).astype('int32'))
-            print('Score {} XYRB {} {} {} {}, Frame {}'.format(label, left, top, right, bottom, frame))
+            print('Score {} XYRB {} {} {} {}, Frame {}'.format(label_score, left, top, right, bottom, label_frame))
             if top - label_size[1] >= 0:
                 text_origin = np.array([left, top - label_size[1]])
             else:
@@ -165,8 +166,10 @@ class SpineDetector:
             #     fill=colors[0])
             # draw.text(text_origin, label, fill=colors[0], font=font)
             if draw_frame:
-                draw.text(text_origin, frame, fill=colors[0], font=font)
+                draw.text(text_origin, label_frame, fill=colors[0], font=font)
             del draw
+        if image.size[0] < 416:
+            image, _ = letterbox_image(image,(416,416))
         return image
 
     def _preprocess_image_on_load(self, img):
@@ -203,5 +206,6 @@ class SpineDetector:
         draw_frames = False
         if len(image_list) > 1:
             draw_frames = True
-        r_image = self._draw_output_image(image, boxes_scores_frames, draw_frames)
+        image_max = _max_projection_from_list(image_list)
+        r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
         return r_image, boxes_scores_frames
