@@ -143,7 +143,7 @@ class SpineDetector:
             score = box_score_frame[4]
             frame = box_score_frame[5]
             label_score = '{:.2f}'.format(score)
-            label_frame = '{:.0f}'.format(frame)
+            label_frame = '{:d}'.format(int(frame))
             draw = ImageDraw.Draw(image)
             label_size = draw.textsize(label_score, font)
             top, left, bottom, right = box
