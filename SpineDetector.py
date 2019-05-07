@@ -19,7 +19,7 @@ class SpineDetector:
         self.score_threshold = 0.3
         self.iou_threshold = 0.45
         self.model_image_size = (416, 416)
-        self.target_scale_pixels_per_um = 10
+        self.target_scale_pixels_per_um = 15
         self.anchors = self._load_anchors()
         self.model = self._load_model()
         self.sess = K.get_session()
