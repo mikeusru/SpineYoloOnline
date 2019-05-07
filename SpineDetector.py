@@ -7,7 +7,7 @@ import keras.backend as K
 from skimage import transform
 
 from model_data.model import yolo_eval
-from model_data.utils import letterbox_image, calc_iou, load_tiff_stack, _max_projection_from_list
+from model_data.utils import letterbox_image, pad_image, calc_iou, load_tiff_stack, _max_projection_from_list
 
 
 class SpineDetector:
@@ -57,7 +57,7 @@ class SpineDetector:
 
     def _preprocess_window(self, image):
         image = Image.fromarray(image).convert("L").convert("RGB")
-        boxed_image, scale = letterbox_image(image, tuple(reversed(self.model_image_size)))
+        boxed_image, scale = pad_image(image, tuple(reversed(self.model_image_size)))
         image_data = np.array(boxed_image, dtype='float32')
         print('Shape: {}, max: {}'.format(image_data.shape, image_data.max()))
         image_data /= 255.
