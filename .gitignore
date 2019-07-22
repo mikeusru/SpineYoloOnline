@@ -3,3 +3,6 @@
 **/lambdapack*
 **/results
 *.h5
+**/image_uploads
+.idea
+**__pycache__/
