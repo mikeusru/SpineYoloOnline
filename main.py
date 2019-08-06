@@ -2,12 +2,28 @@ import os
 import time
 import numpy as np
 from flask import Flask, render_template, request
+from flask_jsglue import JSGlue
+from pusher import Pusher
 
 from SpineDetector import SpineDetector
+from ThreadTest import MyThread
 
 app = Flask(__name__)
+jsglue = JSGlue(app)
+
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC_ROOT = os.path.join(APP_ROOT, 'static')
+spine_detector = SpineDetector()
+spine_detector.set_root_dir(STATIC_ROOT)
+spine_detector.start()
+
+# configure pusher object
+pusher = Pusher(
+    app_id='837983',
+    key='309568955ad8ba7e672c',
+    secret='13e738647a96b49408a6',
+    cluster='us2',
+    ssl=True)
 
 
 @app.route('/')
@@ -17,13 +33,23 @@ def index():
 
 @app.route("/predict", methods=['POST'])
 def predict():
-    spine_detector = SpineDetector()
+    spine_detector.set_pusher(pusher)
     uploaded_image_path = upload_image(request.files.getlist('file'))
     scale = int(request.form['scale'])
-    r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
-    image_file, data_file = save_results(r_image, r_boxes)
-    print('detection done')
-    return render_template("results.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
+    spine_detector.set_inputs(uploaded_image_path, scale)
+    spine_detector.queue.put("find_spines")
+    # r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
+    # image_file, data_file = save_results(r_image, r_boxes)
+    # print('detection done')
+    # return render_template("results.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
+    return render_template("dashboard.html")
+
+
+# @app.route("/predict", methods=['POST'])
+# def predict():
+#     my_thread_obj1 = MyThread(4, pusher)
+#     my_thread_obj1.start()
+#     return render_template("dashboard.html")
 
 
 def upload_image(file_list):
@@ -37,20 +63,6 @@ def upload_image(file_list):
         destination = os.path.join(upload_target, 'image_' + timestr + filename)
         file.save(destination)
     return destination
-
-
-def save_results(image, boxes):
-    sub_path = 'results'
-    if not os.path.isdir(os.path.join(STATIC_ROOT, sub_path)):
-        os.makedirs(os.path.join(STATIC_ROOT, sub_path))
-    timestr = time.strftime("%Y%m%d%H%M%S")
-    img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
-    image_path_full = os.path.join(STATIC_ROOT, img_path_relative)
-    image.save(image_path_full)
-    boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
-    boxes_path_full = os.path.join(STATIC_ROOT, boxes_path_relative)
-    np.savetxt(boxes_path_full, boxes, delimiter=',')
-    return img_path_relative, boxes_path_relative
 
 
 @app.route("/submit_training_data", methods=['POST'])

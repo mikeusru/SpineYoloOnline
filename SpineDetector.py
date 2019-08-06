@@ -1,5 +1,7 @@
 import os
-
+import time
+from threading import Thread
+from queue import Queue
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 from keras.models import model_from_json
@@ -10,8 +12,9 @@ from model_data.model import yolo_eval
 from model_data.utils import letterbox_image, pad_image, calc_iou, load_tiff_stack, _max_projection_from_list
 
 
-class SpineDetector:
+class SpineDetector(Thread):
     def __init__(self):
+        Thread.__init__(self)
         self.anchors_path = os.path.join('model_data', 'yolo_anchors.txt')
         self.model_path = os.path.join('model_data', 'model.json')
         self.weights_path = os.path.join('model_data', 'weights.h5')
@@ -24,6 +27,22 @@ class SpineDetector:
         self.model = self._load_model()
         self.sess = K.get_session()
         self.boxes, self.scores, self.classes = self._generate_output_tensors()
+        self.pusher = None
+        self.image_path = None
+        self.scale = 10
+        self.root_dir = None
+        self.queue = Queue()
+        self.daemon = True
+
+    def set_pusher(self, pusher):
+        self.pusher = pusher
+
+    def set_root_dir(self, root_dir):
+        self.root_dir = root_dir
+
+    def set_inputs(self, image_path, scale):
+        self.image_path = image_path
+        self.scale = scale
 
     def _load_anchors(self):
         anchors_path = os.path.expanduser(self.anchors_path)
@@ -48,8 +67,8 @@ class SpineDetector:
                                            iou_threshold=self.iou_threshold)
         return boxes, scores, classes
 
-    def _rescale_image(self, image, original_scale):
-        resize_ratio = self.target_scale_pixels_per_um / original_scale
+    def _rescale_image(self, image):
+        resize_ratio = self.target_scale_pixels_per_um / self.scale
         new_shape = np.array(image.shape)
         new_shape[:2] = np.array(new_shape[:2] * resize_ratio, dtype=np.int)
         image_rescaled = transform.resize(image, new_shape, preserve_range=True).astype(np.uint8)
@@ -186,11 +205,11 @@ class SpineDetector:
             image_list.append(self._preprocess_image_on_load(image))
         return image_list
 
-    def find_spines(self, image_path, scale):
-        image_list = self._load_image(image_path)
+    def find_spines(self):
+        image_list = self._load_image(self.image_path)
         boxes_scores_frames_list = []
         for frame, image in enumerate(image_list):
-            image_rescaled, resize_ratio = self._rescale_image(image, scale)
+            image_rescaled, resize_ratio = self._rescale_image(image)
             window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
             window_list = self._detect_spines_in_windows(image_rescaled, window_list)
             window_list = self._shift_boxes(window_list)
@@ -208,4 +227,34 @@ class SpineDetector:
             draw_frames = True
         image_max = _max_projection_from_list(image_list)
         r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
-        return r_image, boxes_scores_frames
+        self.pusher.trigger(u'message', u'send', {
+            u'name': 'thread poster',
+            u'message': 'spines found'
+        })
+        self.save_results(r_image, boxes_scores_frames)
+        # return r_image, boxes_scores_frames
+
+    def save_results(self, image, boxes):
+        sub_path = 'results'
+        if not os.path.isdir(os.path.join(self.root_dir, sub_path)):
+            os.makedirs(os.path.join(self.root_dir, sub_path))
+        timestr = time.strftime("%Y%m%d%H%M%S")
+        img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
+        image_path_full = os.path.join(self.root_dir, img_path_relative)
+        image.save(image_path_full)
+        boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
+        boxes_path_full = os.path.join(self.root_dir, boxes_path_relative)
+        np.savetxt(boxes_path_full, boxes, delimiter=',')
+        self.pusher.trigger(u'image', u'send', {
+            u'name': 'thread poster',
+            u'image_link': img_path_relative
+        })
+        # return img_path_relative, boxes_path_relative
+
+    def run(self):
+        while True:
+            val = self.queue.get()
+            if val is None:
+                return
+            if val == 'find_spines':
+                self.find_spines()
