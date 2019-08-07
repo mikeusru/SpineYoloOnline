@@ -96,7 +96,13 @@ class SpineDetector(Thread):
         return window_list
 
     def _detect_spines_in_windows(self, image, window_list):
-        for window in window_list:
+        total_windows = len(window_list)
+        for i, window in enumerate(window_list):
+            progress = int((i+1)/total_windows*100)
+            self.pusher.trigger(u'progress_', u'update', {
+                u'message': 'Analyzing Zone {} of {}'.format(i+1, total_windows),
+                u'progress': progress
+                })
             image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
             image_data, window_scale = self._preprocess_window(image_cut)
             # TODO: Should I run this on batch images because there's a batch dimension?
@@ -245,9 +251,10 @@ class SpineDetector(Thread):
         boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
         boxes_path_full = os.path.join(self.root_dir, boxes_path_relative)
         np.savetxt(boxes_path_full, boxes, delimiter=',')
+        # image_path_absolute = os.path.join(self.root_dir, image_path_full)
         self.pusher.trigger(u'image', u'send', {
             u'name': 'thread poster',
-            u'image_link': img_path_relative
+            u'image_link': 'static/' + img_path_relative
         })
         # return img_path_relative, boxes_path_relative
 

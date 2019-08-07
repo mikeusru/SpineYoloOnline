@@ -3,6 +3,8 @@ const pusher = new Pusher('309568955ad8ba7e672c', {
     cluster: 'us2',
     encrypted: true
 });
+const uID = Math.floor((Math.random()*100)+1);
+
 
     $(document).ready(function(){
       var dataTable = $("#dataTable").DataTable()
