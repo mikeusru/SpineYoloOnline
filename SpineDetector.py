@@ -34,6 +34,7 @@ class SpineDetector(Thread):
         self.queue = Queue()
         self.daemon = True
         self.u_id = ''
+        self.original_image_size = ''
 
     def set_u_id(self, u_id):
         self.u_id = u_id
@@ -75,6 +76,7 @@ class SpineDetector(Thread):
         return boxes, scores, classes
 
     def _rescale_image(self, image):
+        self.original_image_size = str(image.shape)
         resize_ratio = self.target_scale_pixels_per_um / self.scale
         new_shape = np.array(image.shape)
         new_shape[:2] = np.array(new_shape[:2] * resize_ratio, dtype=np.int)
@@ -264,7 +266,7 @@ class SpineDetector(Thread):
             u'image_link': 'static/' + img_path_relative
         })
         self.pusher.trigger(self._get_pusher_channel('spine_results'), u'add', {
-            u'size': 'thread poster',
+            u'size': self.original_image_size,
             u'scale': str(self.scale),
             u'count': str(len(boxes)),
             u'boxes_file': 'static/' + boxes_path_relative
