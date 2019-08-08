@@ -263,6 +263,12 @@ class SpineDetector(Thread):
             u'name': 'thread poster',
             u'image_link': 'static/' + img_path_relative
         })
+        self.pusher.trigger(self._get_pusher_channel('spine_results'), u'add', {
+            u'size': 'thread poster',
+            u'scale': str(self.scale),
+            u'count': str(len(boxes)),
+            u'boxes_file': 'static/' + boxes_path_relative
+        })
         # return img_path_relative, boxes_path_relative
 
     def run(self):
