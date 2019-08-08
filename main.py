@@ -1,15 +1,10 @@
 import os
 import time
-import numpy as np
 from flask import Flask, render_template, request
-from flask_jsglue import JSGlue
 from pusher import Pusher
 
 from SpineDetector import SpineDetector
-from ThreadTest import MyThread
-
 app = Flask(__name__)
-jsglue = JSGlue(app)
 
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC_ROOT = os.path.join(APP_ROOT, 'static')
