@@ -33,6 +33,13 @@ class SpineDetector(Thread):
         self.root_dir = None
         self.queue = Queue()
         self.daemon = True
+        self.u_id = ''
+
+    def set_u_id(self, u_id):
+        self.u_id = u_id
+
+    def _get_pusher_channel(self,channel_prefix):
+        return str(channel_prefix + self.u_id)
 
     def set_pusher(self, pusher):
         self.pusher = pusher
@@ -99,7 +106,7 @@ class SpineDetector(Thread):
         total_windows = len(window_list)
         for i, window in enumerate(window_list):
             progress = int((i+1)/total_windows*100)
-            self.pusher.trigger(u'progress_', u'update', {
+            self.pusher.trigger(self._get_pusher_channel('progress'), u'update', {
                 u'message': 'Analyzing Zone {} of {}'.format(i+1, total_windows),
                 u'progress': progress
                 })
@@ -233,7 +240,7 @@ class SpineDetector(Thread):
             draw_frames = True
         image_max = _max_projection_from_list(image_list)
         r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
-        self.pusher.trigger(u'message', u'send', {
+        self.pusher.trigger(self._get_pusher_channel('message'), u'send', {
             u'name': 'thread poster',
             u'message': 'spines found'
         })
@@ -252,7 +259,7 @@ class SpineDetector(Thread):
         boxes_path_full = os.path.join(self.root_dir, boxes_path_relative)
         np.savetxt(boxes_path_full, boxes, delimiter=',')
         # image_path_absolute = os.path.join(self.root_dir, image_path_full)
-        self.pusher.trigger(u'image', u'send', {
+        self.pusher.trigger(self._get_pusher_channel('image'), u'send', {
             u'name': 'thread poster',
             u'image_link': 'static/' + img_path_relative
         })

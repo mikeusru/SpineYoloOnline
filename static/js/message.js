@@ -6,7 +6,7 @@ $(document).ready(function () {
 
   $('[data-toggle="tooltip"]').tooltip();
 
-  var messageChannel = pusher.subscribe('message');
+  var messageChannel = pusher.subscribe('message' + uID);
   messageChannel.bind('send', function(data) {
     var date = new Date();
     var toAppend = document.createElement('a');

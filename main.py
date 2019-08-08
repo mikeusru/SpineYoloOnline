@@ -34,15 +34,16 @@ def index():
 @app.route("/predict", methods=['POST'])
 def predict():
     spine_detector.set_pusher(pusher)
-    uploaded_image_path = upload_image(request.files.getlist('file'))
+    uploaded_image_path, u_id = upload_image(request.files.getlist('file'))
     scale = int(request.form['scale'])
     spine_detector.set_inputs(uploaded_image_path, scale)
+    spine_detector.set_u_id(u_id)
     spine_detector.queue.put("find_spines")
     # r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
     # image_file, data_file = save_results(r_image, r_boxes)
     # print('detection done')
     # return render_template("results.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
-    return render_template("dashboard.html")
+    return render_template("dashboard.html", uID=u_id)
 
 
 # @app.route("/predict", methods=['POST'])
@@ -62,7 +63,7 @@ def upload_image(file_list):
         timestr = time.strftime("%Y%m%d%H%M%S")
         destination = os.path.join(upload_target, 'image_' + timestr + filename)
         file.save(destination)
-    return destination
+    return destination, timestr
 
 
 @app.route("/submit_training_data", methods=['POST'])

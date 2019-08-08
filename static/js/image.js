@@ -6,7 +6,7 @@ $(document).ready(function () {
 
   $('[data-toggle="tooltip"]').tooltip();
 
-  var imageChannel = pusher.subscribe('image');
+  var imageChannel = pusher.subscribe('image' + uID);
   imageChannel.bind('send', function(data) {
     var toAppend = document.createElement('a');
     document.getElementById('spine-image-box').appendChild(toAppend);
