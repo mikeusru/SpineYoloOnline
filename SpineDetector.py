@@ -36,7 +36,6 @@ class SpineDetector(Thread):
         self.original_image_size = ''
 
     def _get_pusher_channel(self, channel_prefix, u_id):
-        print(str(channel_prefix + u_id))
         return str(channel_prefix + u_id)
 
     def set_pusher(self, pusher):
@@ -231,19 +230,32 @@ class SpineDetector(Thread):
                 frame_array = np.ones([boxes_scores.shape[0], 1]) * frame
                 boxes_scores_frames = np.concatenate([boxes_scores, frame_array], axis=1)
                 boxes_scores_frames_list.append(boxes_scores_frames)
-        boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
-        # TODO: set a range for where overlapping spines are probably different
-        boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
-        draw_frames = False
-        if len(image_list) > 1:
-            draw_frames = True
-        image_max = _max_projection_from_list(image_list)
-        r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
-        self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
-            u'name': 'thread poster',
-            u'message': 'spines found'
-        })
-        self.save_results(r_image, boxes_scores_frames, u_id)
+        if len(boxes_scores_frames_list) != 0:
+            boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
+            # TODO: set a range for where overlapping spines are probably different
+            boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
+            draw_frames = False
+            if len(image_list) > 1:
+                draw_frames = True
+            image_max = _max_projection_from_list(image_list)
+            r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
+            self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
+                u'name': 'thread poster',
+                u'message': 'Spines found!'
+            })
+            self.save_results(r_image, boxes_scores_frames, u_id)
+        else:
+            self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
+                u'name': 'SY',
+                u'message': 'No Spines Found... :('
+            })
+            self.pusher.trigger(self._get_pusher_channel('spine_results', u_id), u'add', {
+                u'size': self.original_image_size,
+                u'scale': str(self.scale),
+                u'count': 0,
+                u'boxes_file': "#"
+            })
+
         # return r_image, boxes_scores_frames
 
     def save_results(self, image, boxes, u_id):
