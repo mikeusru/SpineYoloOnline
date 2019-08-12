@@ -48,10 +48,6 @@ def predict():
     scale = int(request.form['scale'])
     spine_detector.set_inputs(uploaded_image_path, scale)
     spine_detector.queue.put(['find_spines', u_id])
-    # r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
-    # image_file, data_file = save_results(r_image, r_boxes)
-    # print('detection done')
-    # return render_template("esults.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
     return render_template("dashboard.html", uID=u_id)
 
 
@@ -64,7 +60,6 @@ def predict_local(img_path, scale):
     while u_id not in spine_detector.analyzed_spines.keys():
         continue
     results = spine_detector.analyzed_spines[u_id].tolist()
-    response = {'message': 'image path: {} scale:{}'.format(img_path, scale)}
     response_pickled = jsonpickle.encode(results)
     return Response(response=response_pickled, status=200, mimetype="application/json")
 
