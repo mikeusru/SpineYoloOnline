@@ -12,6 +12,11 @@ from model_data.model import yolo_eval
 from model_data.utils import letterbox_image, pad_image, calc_iou, load_tiff_stack, _max_projection_from_list
 
 
+class PusherPlaceholder():
+    def trigger(self, *args, **kwargs):
+        print(args, kwargs)
+
+
 class SpineDetector(Thread):
     def __init__(self):
         Thread.__init__(self)
@@ -27,13 +32,18 @@ class SpineDetector(Thread):
         self.model = self._load_model()
         self.sess = K.get_session()
         self.boxes, self.scores, self.classes = self._generate_output_tensors()
-        self.pusher = None
+        self.pusher = PusherPlaceholder()
         self.image_path = None
         self.scale = 10
         self.root_dir = None
         self.queue = Queue()
         self.daemon = True
         self.original_image_size = ''
+        self.analyzed_spines = {}
+        self.local = True
+
+    def set_local(self, local=True):
+        self.local = local
 
     def _get_pusher_channel(self, channel_prefix, u_id):
         return str(channel_prefix + u_id)
@@ -234,6 +244,7 @@ class SpineDetector(Thread):
             boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
             # TODO: set a range for where overlapping spines are probably different
             boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
+            self._update_local(u_id, boxes_scores_frames)
             draw_frames = False
             if len(image_list) > 1:
                 draw_frames = True
@@ -245,6 +256,7 @@ class SpineDetector(Thread):
             })
             self.save_results(r_image, boxes_scores_frames, u_id)
         else:
+            self._update_local(u_id, np.array([]))
             self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
                 u'name': 'SY',
                 u'message': 'No Spines Found... :('
@@ -257,6 +269,10 @@ class SpineDetector(Thread):
             })
 
         # return r_image, boxes_scores_frames
+
+    def _update_local(self, u_id, results):
+        if self.local:
+            self.analyzed_spines.update({u_id: results})
 
     def save_results(self, image, boxes, u_id):
         sub_path = 'results'
