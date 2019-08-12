@@ -1,5 +1,6 @@
 **/temp
 **/venv*
+**/env*
 **/lambdapack*
 **/results
 *.h5
