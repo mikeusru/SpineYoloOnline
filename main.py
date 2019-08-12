@@ -20,7 +20,7 @@ jsonpickle_numpy.register_handlers()
 
 
 def load_pusher_info():
-    with open(os.path.join('_private', 'pusher.txt'), 'r') as pusher_inf:
+    with open(os.path.join('_private', 'pusher_keys.txt'), 'r') as pusher_inf:
         s = pusher_inf.read()
         pusher_dict = ast.literal_eval(s)
     return pusher_dict
