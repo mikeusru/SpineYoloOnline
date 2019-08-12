@@ -1,5 +1,7 @@
 import os
-
+import time
+from threading import Thread
+from queue import Queue
 import numpy as np
 from PIL import Image, ImageFont, ImageDraw
 from keras.models import model_from_json
@@ -10,8 +12,14 @@ from model_data.model import yolo_eval
 from model_data.utils import letterbox_image, pad_image, calc_iou, load_tiff_stack, _max_projection_from_list
 
 
-class SpineDetector:
+class PusherPlaceholder():
+    def trigger(self, *args, **kwargs):
+        print(args, kwargs)
+
+
+class SpineDetector(Thread):
     def __init__(self):
+        Thread.__init__(self)
         self.anchors_path = os.path.join('model_data', 'yolo_anchors.txt')
         self.model_path = os.path.join('model_data', 'model.json')
         self.weights_path = os.path.join('model_data', 'weights.h5')
@@ -24,6 +32,31 @@ class SpineDetector:
         self.model = self._load_model()
         self.sess = K.get_session()
         self.boxes, self.scores, self.classes = self._generate_output_tensors()
+        self.pusher = PusherPlaceholder()
+        self.image_path = None
+        self.scale = 10
+        self.root_dir = None
+        self.queue = Queue()
+        self.daemon = True
+        self.original_image_size = ''
+        self.analyzed_spines = {}
+        self.local = True
+
+    def set_local(self, local=True):
+        self.local = local
+
+    def _get_pusher_channel(self, channel_prefix, u_id):
+        return str(channel_prefix + u_id)
+
+    def set_pusher(self, pusher):
+        self.pusher = pusher
+
+    def set_root_dir(self, root_dir):
+        self.root_dir = root_dir
+
+    def set_inputs(self, image_path, scale):
+        self.image_path = image_path
+        self.scale = scale
 
     def _load_anchors(self):
         anchors_path = os.path.expanduser(self.anchors_path)
@@ -48,8 +81,9 @@ class SpineDetector:
                                            iou_threshold=self.iou_threshold)
         return boxes, scores, classes
 
-    def _rescale_image(self, image, original_scale):
-        resize_ratio = self.target_scale_pixels_per_um / original_scale
+    def _rescale_image(self, image):
+        self.original_image_size = str(image.shape)
+        resize_ratio = self.target_scale_pixels_per_um / self.scale
         new_shape = np.array(image.shape)
         new_shape[:2] = np.array(new_shape[:2] * resize_ratio, dtype=np.int)
         image_rescaled = transform.resize(image, new_shape, preserve_range=True).astype(np.uint8)
@@ -76,8 +110,14 @@ class SpineDetector:
                 window_list.append(rc)
         return window_list
 
-    def _detect_spines_in_windows(self, image, window_list):
-        for window in window_list:
+    def _detect_spines_in_windows(self, image, window_list, u_id):
+        total_windows = len(window_list)
+        for i, window in enumerate(window_list):
+            progress = int((i + 1) / total_windows * 100)
+            self.pusher.trigger(self._get_pusher_channel('progress', u_id), u'update', {
+                u'message': 'Analyzing Zone {} of {}'.format(i + 1, total_windows),
+                u'progress': progress
+            })
             image_cut = image[window['r']:window['r_max'], window['c']:window['c_max']]
             image_data, window_scale = self._preprocess_window(image_cut)
             # TODO: Should I run this on batch images because there's a batch dimension?
@@ -186,13 +226,13 @@ class SpineDetector:
             image_list.append(self._preprocess_image_on_load(image))
         return image_list
 
-    def find_spines(self, image_path, scale):
-        image_list = self._load_image(image_path)
+    def find_spines(self, u_id):
+        image_list = self._load_image(self.image_path)
         boxes_scores_frames_list = []
         for frame, image in enumerate(image_list):
-            image_rescaled, resize_ratio = self._rescale_image(image, scale)
+            image_rescaled, resize_ratio = self._rescale_image(image)
             window_list = self._get_sliding_window_indices(image_rescaled.shape[:2])
-            window_list = self._detect_spines_in_windows(image_rescaled, window_list)
+            window_list = self._detect_spines_in_windows(image_rescaled, window_list, u_id)
             window_list = self._shift_boxes(window_list)
             window_list = self._rescale_boxes(window_list, resize_ratio)
             boxes_scores = self._get_boxes_scores_array(window_list)
@@ -200,12 +240,68 @@ class SpineDetector:
                 frame_array = np.ones([boxes_scores.shape[0], 1]) * frame
                 boxes_scores_frames = np.concatenate([boxes_scores, frame_array], axis=1)
                 boxes_scores_frames_list.append(boxes_scores_frames)
-        boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
-        # TODO: set a range for where overlapping spines are probably different
-        boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
-        draw_frames = False
-        if len(image_list) > 1:
-            draw_frames = True
-        image_max = _max_projection_from_list(image_list)
-        r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
-        return r_image, boxes_scores_frames
+        if len(boxes_scores_frames_list) != 0:
+            boxes_scores_frames = np.concatenate(boxes_scores_frames_list, axis=0)
+            # TODO: set a range for where overlapping spines are probably different
+            boxes_scores_frames = self._remove_overlapping_boxes(boxes_scores_frames)
+            self._update_local(u_id, boxes_scores_frames)
+            draw_frames = False
+            if len(image_list) > 1:
+                draw_frames = True
+            image_max = _max_projection_from_list(image_list)
+            r_image = self._draw_output_image(image_max, boxes_scores_frames, draw_frames)
+            self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
+                u'name': 'thread poster',
+                u'message': 'Spines found!'
+            })
+            self.save_results(r_image, boxes_scores_frames, u_id)
+        else:
+            self._update_local(u_id, np.array([]))
+            self.pusher.trigger(self._get_pusher_channel('message', u_id), u'send', {
+                u'name': 'SY',
+                u'message': 'No Spines Found... :('
+            })
+            self.pusher.trigger(self._get_pusher_channel('spine_results', u_id), u'add', {
+                u'size': self.original_image_size,
+                u'scale': str(self.scale),
+                u'count': 0,
+                u'boxes_file': "#"
+            })
+
+        # return r_image, boxes_scores_frames
+
+    def _update_local(self, u_id, results):
+        if self.local:
+            self.analyzed_spines.update({u_id: results})
+
+    def save_results(self, image, boxes, u_id):
+        sub_path = 'results'
+        if not os.path.isdir(os.path.join(self.root_dir, sub_path)):
+            os.makedirs(os.path.join(self.root_dir, sub_path))
+        timestr = time.strftime("%Y%m%d%H%M%S")
+        img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
+        image_path_full = os.path.join(self.root_dir, img_path_relative)
+        image.save(image_path_full)
+        boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
+        boxes_path_full = os.path.join(self.root_dir, boxes_path_relative)
+        np.savetxt(boxes_path_full, boxes, delimiter=',')
+        # image_path_absolute = os.path.join(self.root_dir, image_path_full)
+        self.pusher.trigger(self._get_pusher_channel('image', u_id), u'send', {
+            u'name': 'thread poster',
+            u'image_link': 'static/' + img_path_relative
+        })
+        self.pusher.trigger(self._get_pusher_channel('spine_results', u_id), u'add', {
+            u'size': self.original_image_size,
+            u'scale': str(self.scale),
+            u'count': str(len(boxes)),
+            u'boxes_file': 'static/' + boxes_path_relative
+        })
+        # return img_path_relative, boxes_path_relative
+
+    def run(self):
+        while True:
+            val = self.queue.get()
+            if val is None:
+                return
+            if val[0] == 'find_spines':
+                self.find_spines(val[1])

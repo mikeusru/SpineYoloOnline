@@ -1,13 +1,39 @@
 import os
 import time
-import numpy as np
-from flask import Flask, render_template, request
+import ast
+import jsonpickle
+from flask import Flask, render_template, request, Response
+from pusher import Pusher
+import jsonpickle.ext.numpy as jsonpickle_numpy
 
 from SpineDetector import SpineDetector
 
 app = Flask(__name__)
+
 APP_ROOT = os.path.dirname(os.path.abspath(__file__))
 STATIC_ROOT = os.path.join(APP_ROOT, 'static')
+spine_detector = SpineDetector()
+spine_detector.set_root_dir(STATIC_ROOT)
+spine_detector.start()
+
+jsonpickle_numpy.register_handlers()
+
+
+def load_pusher_info():
+    with open(os.path.join('_private', 'pusher.txt'), 'r') as pusher_inf:
+        s = pusher_inf.read()
+        pusher_dict = ast.literal_eval(s)
+    return pusher_dict
+
+
+# configure pusher object
+pusher_dict = load_pusher_info()
+pusher = Pusher(
+    app_id=pusher_dict['app_id'],
+    key=pusher_dict['key'],
+    secret=pusher_dict['secret'],
+    cluster=pusher_dict['cluster'],
+    ssl=True)
 
 
 @app.route('/')
@@ -17,13 +43,30 @@ def index():
 
 @app.route("/predict", methods=['POST'])
 def predict():
-    spine_detector = SpineDetector()
-    uploaded_image_path = upload_image(request.files.getlist('file'))
+    spine_detector.set_pusher(pusher)
+    uploaded_image_path, u_id = upload_image(request.files.getlist('file'))
     scale = int(request.form['scale'])
-    r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
-    image_file, data_file = save_results(r_image, r_boxes)
-    print('detection done')
-    return render_template("results.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
+    spine_detector.set_inputs(uploaded_image_path, scale)
+    spine_detector.queue.put(['find_spines', u_id])
+    # r_image, r_boxes = spine_detector.find_spines(uploaded_image_path, scale)
+    # image_file, data_file = save_results(r_image, r_boxes)
+    # print('detection done')
+    # return render_template("esults.html", boxes=r_boxes, image_name=image_file, data_name=data_file)
+    return render_template("dashboard.html", uID=u_id)
+
+
+@app.route("/predict-local/<path:img_path>/<float:scale>", methods=['POST'])
+def predict_local(img_path, scale):
+    u_id = time.strftime("%Y%m%d%H%M%S")
+    spine_detector.set_local(True)
+    spine_detector.set_inputs(img_path, scale)
+    spine_detector.queue.put(['find_spines', u_id, 'local'])
+    while u_id not in spine_detector.analyzed_spines.keys():
+        continue
+    results = spine_detector.analyzed_spines[u_id].tolist()
+    response = {'message': 'image path: {} scale:{}'.format(img_path, scale)}
+    response_pickled = jsonpickle.encode(results)
+    return Response(response=response_pickled, status=200, mimetype="application/json")
 
 
 def upload_image(file_list):
@@ -36,21 +79,7 @@ def upload_image(file_list):
         timestr = time.strftime("%Y%m%d%H%M%S")
         destination = os.path.join(upload_target, 'image_' + timestr + filename)
         file.save(destination)
-    return destination
-
-
-def save_results(image, boxes):
-    sub_path = 'results'
-    if not os.path.isdir(os.path.join(STATIC_ROOT, sub_path)):
-        os.makedirs(os.path.join(STATIC_ROOT, sub_path))
-    timestr = time.strftime("%Y%m%d%H%M%S")
-    img_path_relative = os.path.join(sub_path, 'r_img' + timestr + '.jpg')
-    image_path_full = os.path.join(STATIC_ROOT, img_path_relative)
-    image.save(image_path_full)
-    boxes_path_relative = os.path.join(sub_path, 'r_boxes' + timestr + '.csv')
-    boxes_path_full = os.path.join(STATIC_ROOT, boxes_path_relative)
-    np.savetxt(boxes_path_full, boxes, delimiter=',')
-    return img_path_relative, boxes_path_relative
+    return destination, timestr
 
 
 @app.route("/submit_training_data", methods=['POST'])
