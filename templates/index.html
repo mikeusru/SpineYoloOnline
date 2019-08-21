@@ -15,7 +15,7 @@
     <form id="upload_form" action="{{url_for('predict')}}" method="POST" enctype="multipart/form-data">
         <input type="file" name="file" accept = "image/*" multiple>
         <p> Enter Scale in pixels/um</p>
-        <input name="scale">
+        <input type="number" name="scale">
         <input type="submit" class="btn-predict" value="predict">
     </form>
 
