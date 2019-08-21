@@ -45,7 +45,7 @@ def index():
 def predict():
     spine_detector.set_pusher(pusher)
     uploaded_image_path, u_id = upload_image(request.files.getlist('file'))
-    scale = int(request.form['scale'])
+    scale = float(request.form['scale'])
     spine_detector.set_inputs(uploaded_image_path, scale)
     spine_detector.queue.put(['find_spines', u_id])
     return render_template("dashboard.html", uID=u_id)
